@@ -5,11 +5,11 @@ Helper functions for `scikit-learn <https://github.com/scikit-learn/scikit-learn
 
 There are currently 5 main functions:
 
-- `tune_fit_model`: Fit a model, find best subset or forward selection subset and then tune hyperparameters. It also works if you don't need to find a subset or tune hyperparameters. Returns a dictionary with results.
+- `tune_fit_model`_: Fit a model, find best subset or forward selection subset and then tune hyperparameters. It also works if you don't need to find a subset or tune hyperparameters. Returns a dictionary with results.
 - `best_subset_selection`: Performs best subset selection (tests every possible model). Returns both the best score and subset.
-- `fw_cv_selection`: Performs forwards subset selection with cross validation. Returns both the best score and subset.
-- `fill_na_array`: Fill missing values on an array with another array. Returns pandas dataframe.
-- `select_alpha`: Basic function intended to iteratively select the best value for alpha in those algorithms that use it as a parameter, such as LASSO and RIDGE regression.
+- `fw_cv_selection`_: Performs forwards subset selection with cross validation. Returns both the best score and subset.
+- `fill_na_array`_: Fill missing values on an array with another array. Returns pandas dataframe.
+- `select_alpha`_: Basic function intended to iteratively select the best value for alpha in those algorithms that use it as a parameter, such as LASSO and RIDGE regression.
 
 Known issues:
 -------------
