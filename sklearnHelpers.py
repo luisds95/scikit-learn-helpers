@@ -31,7 +31,6 @@ def best_subset_selection(X, y, model, cv=5, scoring=None, verbose=1):
     if verbose > 0:
         n_comb = reduce(lambda a,b : a+b, [n_combinations(n_features, r)
                                            for r in range(1, n_features+1)])
-        print(n_comb)
         init_time = dt.now()
         print("Initializing best subset selection process...")
 
@@ -50,7 +49,6 @@ def best_subset_selection(X, y, model, cv=5, scoring=None, verbose=1):
         if verbose > 0 and (i-1) % verbose == 0:
             n_comb_so_far = reduce(lambda a,b : a+b, [n_combinations(n_features, r)
                                                for r in range(1,i+1)])
-            print(n_comb_so_far)
             perc = n_comb_so_far/n_comb
             time_diff = dt.now() - init_time
             time_remaining = time_diff * (1/perc - 1)
