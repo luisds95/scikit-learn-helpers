@@ -107,23 +107,12 @@ def fw_cv_selection(X, y, model, cv=5, verbose=True, stopping=None, scoring=None
 
     return best_score, best_features
 
-# In[ ]:
 
-
-def fill_na_preds(data, preds):
+def fill_na_array(base, fill):
     """
     Fills NaN values with predictions
     """
-    result = []
-    for i in range(len(preds)):
-        if pd.isna(data[i]):
-            result.append(preds[i])
-        else:
-            result.append(data[i])
-    return np.array(result)
-
-
-# In[ ]:
+    return pd.DataFrame(base).fillna(pd.DataFrame(fill))
 
 
 def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_selection=False,
