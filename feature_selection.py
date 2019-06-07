@@ -1,15 +1,19 @@
 """
-Set of functions and classes which are seek to perform some routines that
-aren't built into scikit-learn.
+Feature selection helper functions.
 
 Creator: Luis Da Silva.
-Last update: 16/01/2019.
+luisds95.github.io
+Last update: 07/06/2019.
+
+TODO: Optimize parameter search
+TODO: Change verbosity to progress bar. Use Keras as inspiration.
+TODO: Make scoring procedure more flexible, allow user to pass their own f(model, X, y)
 """
 
 # coding: utf-8
 import numpy as np
 import pandas as pd
-import warnings, math
+import math
 from datetime import datetime as dt
 from functools import reduce
 from itertools import combinations
@@ -61,18 +65,29 @@ def best_subset_selection(X, y, model, cv=5, scoring=None, verbose=1):
     return best_score, best_subset
 
 
-def fw_cv_selection(X, y, model, cv=5, verbose=True, stopping=None, scoring=None):
+def fw_cv_selection(X, y, model, cv=5, stopping=None, scoring=None, min_increase=0,
+                    warm_start=None, verbose=True):
     """
     Helper function to perform forward selection
     """
     if verbose:
         print("Initializing forward selection process...")
         itime = dt.now()
-    
-    all_features = list(X.columns)
-    selected_features = []
-    all_first = True
+    if min_increase >= 1:
+        min_increase /= 100
+
     no_update = 0
+
+    if warm_start is not None:
+        selected_features = warm_start
+        all_features = [f for f in X.columns if f not in selected_features]
+        best_score = np.mean(cross_val_score(model, X[selected_features], y, cv=cv, scoring=scoring))
+        best_features = selected_features
+        all_first = False
+    else:
+        all_features = list(X.columns)
+        selected_features = []
+        all_first = True
     
     for r in range(len(all_features)):
         rtime = dt.now()
@@ -90,7 +105,7 @@ def fw_cv_selection(X, y, model, cv=5, verbose=True, stopping=None, scoring=None
                     all_first = False
                     best_score = score
                     best_features = features
-            elif score > best_score_this_round:
+            elif score > best_score_this_round * (1 + min_increase):
                 best_score_this_round = score
                 best_feature_this_round = f1
                 if score > best_score:
@@ -125,8 +140,8 @@ def fill_na_array(base, fill):
 
 
 def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_selection=False,
-             predictDB = None, self_predict = False, scaling=None,
-             scoring=None, cv=5, verbose=True, stopping=None):
+             predictDB = None, self_predict = False, scaling=None, min_decrease = 0,
+             scoring=None, cv=5, verbose=True, stopping=None, warm_start=None):
     """
     Function to tune and fit a model at once by using cross validation.
 
@@ -137,12 +152,14 @@ def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_se
     :param best_subset: Whether to perform best subset selection or not.
     :param forward_selection: Whether to perform forward_selection or not.
     :param predictDB: Database on which make predictions.
-    :param self_predict: Predict on X.
+    :param self_predict: Predict on training dataset (X).
     :param scaling: List of variables to scale.
+    :param min_decrease: minimum percentage error reduction for a feature to be allowed to enter into the subset.
     :param scoring: Scoring method.
     :param cv: Number of folds to be used in cross-validation.
     :param verbose: if verbosity or not.
     :param stopping: number of rounds to keep going without score improving.
+    :param warm_start: List of features to initialize forward selection on.
     :return: results dictionary.
     """
     
@@ -162,15 +179,16 @@ def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_se
         params = model.get_params()
 
     # Finding best subset
-    
+    best_found = True
     if best_subset:
         best_score, best_subset = best_subset_selection(X, y, model, scoring=scoring)
     elif forward_selection:
         best_score, best_subset = fw_cv_selection(X, y, model, verbose=verbose,
-                                                  stopping=stopping, scoring=scoring)
+                                                  min_increase=min_decrease,
+                                                  stopping=stopping, scoring=scoring,
+                                                  warm_start=warm_start)
     else:
-        best_score = np.nan
-        best_subset = list(X.columns)
+        best_found = False
 
     # Tuning parameters
     if param_grid is not None:
@@ -179,11 +197,18 @@ def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_se
         params = tune_model.best_params_
         model.set_params(**params)
 
+    if not best_found:
+        best_score = cross_val_score(model, X, y, scoring=scoring, cv=cv)
+        best_subset = list(X.columns)
+
+    # Save results
+    model.fit(X[best_subset], y)
     name = type(model).__name__
     results = {'name': name,
                'parameters': params,
                'score': best_score,
-               'subset': best_subset}
+               'subset': best_subset,
+               'model': model}
     
     # Printing results
     if verbose:
@@ -194,9 +219,6 @@ def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_se
         if params:
             print("Parameters: {}".format(params))
         print("-"*20)
-
-    model.fit(X[best_subset], y)
-    results['model'] = model
     
     if self_predict:
         results['self_pred'] = model.predict(X[best_subset])
@@ -206,104 +228,3 @@ def tune_fit_model(X, y, Model, param_grid=None, best_subset = False, forward_se
         results['predictions'] = model.predict(predictDB[best_subset])
     
     return results
-
-
-def check_alpha_selection(algorithm, X, y, param, params, best_score,
-                          best_param, precision=0.0001, multiplier=1000000,
-                          cv=5, direction=1, change=10):
-    """
-    Test alpha value and look for a better one.
-
-    :param algorithm: Un-called scikit-learn model that allows alpha
-    :param X: X data frame
-    :param y: target variable
-    :param param: String name of the param to fit.
-    :param params: Dictionary of params for model.
-    :param cv: int. Number of folds for cross-validation.
-    :param best_score: current best score
-    :param best_param: current best value for parameter.
-    :param multiplier: searching strength
-    :param precision: decimal point precision
-    :param direction: 1 or -1
-    :param change: factor to calculate new multiplier if no better alpha is found
-    :return: best_score, best_alpha, direction
-
-    Note: Needs to be generalized and tested.
-    """
-    if multiplier < 1:
-        # Stop condition
-        return best_score, best_param, direction
-    
-    # Get new score (+)
-    new_param = best_param + precision * multiplier * direction
-    params[param] = new_param
-    model = algorithm(**params)
-    new_score = np.mean(cross_val_score(model, X, y, cv=cv))
-    
-    if new_score > best_score:
-        # Better alpha found
-        best_score = new_score
-        best_param = new_param
-        return best_score, best_param, direction
-        
-    else:
-        # Try going the other way (-)
-        new_param = best_param - precision * multiplier * direction
-        params[param] = new_param
-        model = algorithm(**params)
-        new_score = np.mean(cross_val_score(model, X, y, cv=cv))
-        if new_score > best_score:
-            best_score = new_score
-            best_param = new_param
-            return best_score, best_param, -direction
-        
-        else:
-            # No progress made, so change multiplier
-            return check_alpha_selection(algorithm, X, y, cv, best_score,
-                          best_param, multiplier/change, precision, 1)
-
-
-def select_param(algorithm, X, y, param, params, precision=0.0001, multiplier=1000000,
-                 cv=5, verbose=True, max_iters=1000):
-    """
-    Basic function intended to iteratively select the best value for alpha
-    in those algorithms that use it as a parameter, such as LASSO and
-    RIDGE regression.
-
-    :param algorithm: Un-called scikit-learn model that allows alpha
-    :param X: X Data Frame
-    :param y: target variable
-    :param precision: float decimal indicating how much to optimize
-    :param multiplier: adjusting strength
-    :param alpha: initial alpha level, int.
-    :param cv: number of folds to be use in cross-validation.
-    :param verbose: if verbosity or not.
-    :return: new_alpha, new_score.
-
-    Note: Needs generalization.
-    """
-    # Model
-    model = algorithm(**params)
-    
-    # Initial score
-    score = np.mean(cross_val_score(model, X, y, cv=cv))
-    
-    new_param = params[param]
-    new_score = 0
-    direction = 1
-    improvement = precision + 1
-    iters = 0
-    
-    while improvement > precision:
-        if iters >= max_iters:
-            print("Max iterations reached. Result may be unstable.")
-            break
-
-        old_score = new_score
-        new_score, new_param, direction = check_alpha_selection(algorithm,
-                          X, y, cv, score, new_param, multiplier, direction)
-        improvement = new_score - old_score
-        if verbose:
-            print("Selected {}={} which improved performance in: {}".format(param, new_param,
-                                                                            improvement))
-    return new_param, new_score
