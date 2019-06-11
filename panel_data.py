@@ -3,7 +3,7 @@ Time series or Panel Data Cross Validation helper functions.
 
 Creator: Luis Da Silva.
 luisds95.github.io
-Last update: 07/06/2019.
+Last update: 11/06/2019.
 """
 
 import numpy as np
@@ -15,21 +15,31 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 def standardize_input_format(df=None, X=None, y=None, df_test=None, X_test=None, y_test=None):
     # Helper function to standardize inputs
     if df is not None:
-        X = df.loc[:,X]
-        y = df.loc[:,y]
+        # X and y as list/string must be provided
+        Xdf = df.loc[:, X]
+        ydf = df.loc[:, y]
     else:
         # X and y as dataframe must be provided
+        Xdf = X
+        ydf = y
         df = pd.merge(X, y, right_index=True, left_index=True)
 
-    if df_test is None and X_test is None:
-        X_test = X
-        y_test = y
-    elif df_test is not None:
-        # X_test and y_test as dataframes must be provided
-        X_test = df_test.loc[:, X]
-        y_test = df_test.loc[:, y]
+    if df_test is None:
+        if X_test is None:
+            X_test = Xdf
+            y_test = ydf
+        else:
+            # X_test and y_test as dataframes must be provided
+            pass
+    else:
+        if X_test is None:
+            X_test = df_test.loc[:, X]
+            y_test = df_test.loc[:, y]
+        else:
+            X_test = df_test.loc[:, X_test]
+            y_test = df_test.loc[:, y_test]
 
-    return df, X, y, X_test, y_test
+    return df, Xdf, ydf, X_test, y_test
 
 
 def time_splitter(df, time_var, n=5, df_test=None):
